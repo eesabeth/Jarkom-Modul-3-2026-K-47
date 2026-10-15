@@ -31,7 +31,7 @@ subnet 10.87.3.0 netmask 255.255.255.0 {
 }
 
 nano /etc/default/isc-dhcp-server
-# add eth 0 ke INTERNETV4
+# add eth0 ke INTERNETV4
 service isc-dhcp-server restart
 service isc-dhcp-server status
 
