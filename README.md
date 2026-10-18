@@ -532,6 +532,7 @@ dig -x 10.87.1.4
 ping -c 3 google.com
 ```
 Hasil:
+
 <img width="663" height="451" alt="Soal_12 (1)" src="https://github.com/user-attachments/assets/c428148d-af69-42d6-9f0a-99b07f3e242c" />
 <img width="1016" height="242" alt="Soal_12 (3)" src="https://github.com/user-attachments/assets/08396f93-cf0a-4fc9-a8b3-d5b311b0f693" />
 <img width="754" height="400" alt="Soal_12 (2)" src="https://github.com/user-attachments/assets/dad9db74-5206-4842-93c9-0d3151abcb2b" />
@@ -707,6 +708,7 @@ curl -H "Host: jujutsu.K47.com" http://10.87.4.2
 curl -H "Host: jujutsu.K47.com" http://10.87.4.2/api
 ```
 Hasil:
+
 <img width="517" height="182" alt="Soal_14" src="https://github.com/user-attachments/assets/03ab8401-0292-4422-9cbd-b8ac376a81f1" />
 
 
@@ -798,6 +800,7 @@ Restart layanan PHP (service php8.4-fpm restart).
 
 4. Verifikasi: Lakukan curl dari client, lalu cek log database di yaga untuk memastikan IP client tercatat dengan benar.
 Hasil:
+
 <img width="1016" height="226" alt="Soal_17 (1)" src="https://github.com/user-attachments/assets/3af8bc15-3738-4009-a910-8be4f37290de" />
 <img width="702" height="50" alt="Soal_17 (2)" src="https://github.com/user-attachments/assets/4dd976f5-d002-4ab7-bc94-c43da909a7db" />
 
@@ -829,6 +832,7 @@ service nginx stop
 curl -H "Host: jujutsu.K47.com" http://10.87.1.4/api
 ```
 Hasil:
+
 <img width="586" height="90" alt="Soal_18 (3)" src="https://github.com/user-attachments/assets/fe2b53bc-261e-497f-983b-0b43db334ee4" />
 <img width="1005" height="255" alt="Soal_18 (2)" src="https://github.com/user-attachments/assets/2acfe177-3851-46aa-aa83-696a18ae1195" />
 <img width="635" height="159" alt="Soal_18 (1)" src="https://github.com/user-attachments/assets/ab906f60-2b5f-489b-879e-ef16bcf0d6ab" />
@@ -868,6 +872,7 @@ curl -I -H "Host: jujutsu.K47.com" http://10.87.1.4/
 for i in {1..20}; do curl -s -I -H "Host: jujutsu.K47.com" http://10.87.1.4/api | grep "HTTP/"; done
 ```
 Hasil:
+
 <img width="1102" height="525" alt="Soal_19" src="https://github.com/user-attachments/assets/0f05f053-4465-48bf-afea-908c1534ee5b" />
 
 
@@ -884,5 +889,6 @@ for i in {1..30}; do echo -n "Request $i: "; curl -s -I -H "Host: jujutsu.K47.co
 tail -n 30 /var/log/nginx/access.log
 ```
 Hasil:
+
 <img width="1104" height="538" alt="Soal_20 (2)" src="https://github.com/user-attachments/assets/f1098133-3182-4b82-8969-329708f8c8f3" />
 <img width="873" height="559" alt="Soal_20 (1)" src="https://github.com/user-attachments/assets/74b458b2-f60c-40d5-b76c-fe4514ef8c6e" />
