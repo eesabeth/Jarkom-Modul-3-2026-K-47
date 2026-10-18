@@ -370,3 +370,519 @@ Hasil:
 <img src="assets/Modul3_10Ping2.png" width="450">  
 <img src="assets/Modul3_10Ping3.png" width="450">  
 <img src="assets/Modul3_10Ping4.png" width="450">  
+
+### Soal 11 (Farrel)
+1. Konfigurasi Router dan NAT: Buka terminal pada node jichi untuk mengaktifkan IP Forwarding, NAT Masquerade, dan konfigurasi IP Gateway untuk tiap Switch:
+```
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+ip addr add 10.87.1.1/24 dev eth1
+ip link set eth1 up
+ip addr add 10.87.2.1/24 dev eth2
+ip link set eth2 up
+```
+2. Konfigurasi Node Utahime (DNS Master): Atur rute default dan DNS resolver pada utahime agar bisa terhubung ke internet, lalu instal BIND9:
+```
+ip route add default via 10.87.1.1
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+
+apt-get update
+apt-get install bind9 bind9utils dnsutils -y
+```
+Edit Konfigurasi Master Zone: Buka file named.conf.local:
+```
+nano /etc/bind/named.conf.local
+```
+Isikan konfigurasi berikut:
+```
+zone "jujutsu.K47.com" {
+    type master;
+    file "/etc/bind/jujutsu/jujutsu.K47.com";
+    allow-transfer { 10.87.1.3; };
+    also-notify { 10.87.1.3; };
+};
+```
+Buat File Record Zone Master:
+```
+mkdir -p /etc/bind/jujutsu
+nano /etc/bind/jujutsu/jujutsu.K47.com
+```
+Isikan data record berikut, lalu restart layanan DNS:
+```
+$TTL    604800
+@       IN      SOA     ns1.jujutsu.K47.com. admin.jujutsu.K47.com. (
+                              2023102602 ; Serial
+                                  604800 ; Refresh
+                                   86400 ; Retry
+                                 2419200 ; Expire
+                                  604800 ) ; Negative Cache TTL
+;
+@       IN      NS      ns1.jujutsu.K47.com.
+@       IN      NS      ns2.jujutsu.K47.com.
+
+ns1     IN      A       10.87.1.2
+ns2     IN      A       10.87.1.3
+@       IN      A       10.87.1.2
+test    IN      A       192.168.100.100
+```
+```
+service named restart
+```
+3. Konfigurasi Node Shoko (DNS Slave): Buka terminal shoko, atur jaringan, instal BIND9, dan konfigurasi slave zone:
+```
+ip route add default via 10.87.1.1
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+apt-get update
+apt-get install bind9 bind9utils dnsutils -y
+```
+Edit Konfigurasi Slave Zone:
+```
+nano /etc/bind/named.conf.local
+```
+Isikan konfigurasi slave, lalu restart layanan:
+```
+zone "jujutsu.K47.com" {
+    type slave;
+    file "/var/lib/bind/jujutsu.K47.com";
+    masters { 10.87.1.2; };
+};
+```
+4. Pengujian pada Client: Buka terminal pada itadori, atur IP jaringan, lakukan tes ping antar switch, dan pastikan query DNS berhasil dialihkan ke IP 192.168.100.100:
+```
+ip addr add 10.87.2.2/24 dev eth0
+ip link set eth0 up
+ip route add default via 10.87.2.1
+
+ping -c 3 10.87.1.3
+dig @10.87.1.3 test.jujutsu.K47.com
+```
+Hasil:
+
+<img width="848" height="664" alt="Soal_11 (2)" src="https://github.com/user-attachments/assets/21be8e3c-b945-48e3-b002-c02b6cd4eb24" />
+
+
+### Soal 12 (Farrel)
+1. Menambahkan Konfigurasi Zone dan Record pada DNS Master: Buka terminal utahime, tambahkan CNAME dan update A record pada file zone jujutsu.K47.com:
+```
+nano /etc/bind/jujutsu/jujutsu.K47.com
+```
+Tambahkan baris berikut di bagian bawah:
+```
+@       IN      A       10.87.1.4
+www     IN      CNAME   jujutsu.K47.com.
+```
+Daftarkan Reverse Zone ke named.conf.local:
+```
+nano /etc/bind/named.conf.local
+```
+```
+zone "1.87.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/jujutsu/10.87.1.rev";
+};
+```
+Buat File Reverse Zone (PTR):
+```
+nano /etc/bind/jujutsu/10.87.1.rev
+```
+Isikan:
+```
+$TTL    604800
+@       IN      SOA     ns1.jujutsu.K47.com. admin.jujutsu.K47.com. (
+                              2023102601 ; Serial
+                                  604800 ; Refresh
+                                   86400 ; Retry
+                                 2419200 ; Expire
+                                  604800 ) ; Negative Cache TTL
+;
+@       IN      NS      ns1.jujutsu.K47.com.
+@       IN      NS      ns2.jujutsu.K47.com.
+
+4       IN      PTR     jujutsu.K47.com.
+```
+Konfigurasi DNS Forwarder & Recursion:
+```
+nano /etc/bind/named.conf.options
+```
+Ubah file menjadi:
+```
+options {
+    directory "/var/cache/bind";
+    recursion yes;
+    allow-query { any; };
+    allow-recursion { any; };
+    forwarders {
+        192.168.122.1;
+    };
+    dnssec-validation no;
+    listen-on-v6 { any; };
+};
+```
+Lalu restart layanan:
+```
+service named restart
+```
+2. Pengujian pada Client: Buka terminal itadori, pastikan DNS resolver mengarah ke utahime (10.87.1.2), lalu lakukan pengujian CNAME, PTR, dan Ping Internet:
+```
+dig www.jujutsu.K47.com
+dig -x 10.87.1.4
+ping -c 3 google.com
+```
+Hasil:
+<img width="663" height="451" alt="Soal_12 (1)" src="https://github.com/user-attachments/assets/c428148d-af69-42d6-9f0a-99b07f3e242c" />
+<img width="1016" height="242" alt="Soal_12 (3)" src="https://github.com/user-attachments/assets/08396f93-cf0a-4fc9-a8b3-d5b311b0f693" />
+<img width="754" height="400" alt="Soal_12 (2)" src="https://github.com/user-attachments/assets/dad9db74-5206-4842-93c9-0d3151abcb2b" />
+
+
+### Soal 13 (Farrel)
+1. Konfigurasi Routing untuk Network MariaDB: Di terminal jichi, tambahkan gateway untuk subnet databa
+```
+ip addr del 10.87.4.1/24 dev eth3 2>/dev/null
+ip addr add 10.87.4.1/24 dev eth4
+ip link set eth4 up
+```
+2. Konfigurasi Node Yaga (Master MariaDB): Atur rute, instal MariaDB, dan edit bind-address serta server-id:
+```
+ip route add default via 10.87.4.1
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+apt-get update
+apt-get install mariadb-server -y
+
+nano /etc/mysql/mariadb.conf.d/50-server.cnf
+```
+Sesuaikan baris berikut pada blok [mariadbd]:
+```
+bind-address            = 0.0.0.0
+server-id               = 1
+log_bin                 = /var/log/mysql/mysql-bin.log
+skip-name-resolve
+```
+Pembuatan Database dan User Replikasi: Restart MariaDB lalu masuk ke terminal MySQL:
+```
+service mariadb restart
+mysql -u root
+```
+```
+CREATE DATABASE IF NOT EXISTS db_shibuya_K47;
+USE db_shibuya_K47;
+
+CREATE TABLE IF NOT EXISTS request_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    log_message VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE USER IF NOT EXISTS 'replica'@'%' IDENTIFIED BY 'password_replica';
+GRANT REPLICATION SLAVE ON *.* TO 'replica'@'%';
+
+CREATE USER IF NOT EXISTS 'admin_shibuya'@'10.87.4.%' IDENTIFIED BY 'password_admin';
+GRANT ALL PRIVILEGES ON db_shibuya_K47.* TO 'admin_shibuya'@'10.87.4.%';
+
+FLUSH PRIVILEGES;
+SHOW MASTER STATUS;
+```
+3. Konfigurasi Node Inumaki (Slave MariaDB): Atur IP, instal MariaDB, dan konfigurasi server-id:
+```
+ip route add default via 10.87.4.1
+apt-get update
+apt-get install mariadb-server -y
+
+nano /etc/mysql/mariadb.conf.d/50-server.cnf
+```
+Sesuaikan blok [mariadbd]:
+```
+bind-address            = 0.0.0.0
+server-id               = 2
+skip-name-resolve
+```
+Restart MariaDB, lalu masuk ke MySQL dan buat struktur tabel awal:
+```
+service mariadb restart
+mysql -u root
+```
+```
+CREATE DATABASE IF NOT EXISTS db_shibuya_K47;
+USE db_shibuya_K47;
+CREATE TABLE IF NOT EXISTS request_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    log_message VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+4. Penghubungan Replikasi dan Pengujian: Di terminal MariaDB inumaki, hubungkan ke Master menggunakan Log File dan Posisi yang dicatat sebelumnya:
+```
+STOP SLAVE;
+
+CHANGE MASTER TO
+    MASTER_HOST='10.87.4.9',
+    MASTER_USER='replica',
+    MASTER_PASSWORD='password_replica',
+    MASTER_LOG_FILE='mysql-bin.000001',
+    MASTER_LOG_POS=1699;
+
+START SLAVE;
+SHOW SLAVE STATUS \G
+```
+Hasil:
+1. Jalankan di terminal yaga:
+```
+mysql -u root -e "USE db_shibuya_K47; INSERT INTO request_logs (log_message) VALUES ('Test Replikasi Database Yaga ke Inumaki Berhasil');"
+```
+2. Jalankan di terminal inumaki (harus muncul data yang sama):
+```
+mysql -u root -e "USE db_shibuya_K47; SELECT * FROM request_logs;"
+```
+
+<img width="1112" height="629" alt="Soal_13 (2)" src="https://github.com/user-attachments/assets/51dc3ed4-002e-4de8-8912-4855d02d6cdd" />
+<img width="1165" height="658" alt="Soal_13 (1)" src="https://github.com/user-attachments/assets/480e3887-98cd-469f-b162-2e067c93f0cd" />
+
+### Soal 14 (Farrel)
+1. Konfigurasi Geto (Reverse Proxy & Load Balancer): Instal Nginx dan atur konfigurasi upstream untuk load balancing frontend dan backend:
+```
+apt-get update
+apt-get install nginx -y
+nano /etc/nginx/nginx.conf
+```
+Tambahkan blok upstream dan server:
+```
+http {
+    # ... [konfigurasi dasar] ...
+    upstream frontend_pool {
+        server 10.87.4.3;
+        server 10.87.4.4;
+    }
+    upstream backend_pool {
+        server 10.87.4.5;
+        server 10.87.4.6;
+        server 10.87.4.7;
+    }
+    server {
+        listen 80 default_server;
+        server_name jujutsu.K47.com _;
+
+        location / {
+            proxy_pass http://frontend_pool;
+        }
+        location /api {
+            proxy_pass http://backend_pool/;
+        }
+    }
+}
+```
+Lalu bersihkan file default dan restart:
+```
+rm -f /etc/nginx/sites-enabled/default
+service nginx restart
+```
+2. Konfigurasi Maki & Panda (Frontend Worker): Instal Nginx dan buat halaman penanda index:
+```
+apt-get update && apt-get install nginx -y
+echo "<h1>Frontend Server: maki</h1>" > /var/www/html/index.html
+service nginx restart
+```
+3.Konfigurasi Nanami, Todo, Kirara (Backend Worker): Instal PHP, buat script API, dan atur Nginx:
+```
+apt-get update
+apt-get install nginx php-fpm php-mysql -y
+mkdir -p /var/www/api/api
+nano /var/www/api/index.php
+```
+Isi dengan script koneksi database PHP (Insert Request Log). Lalu konfigurasi virtual host backend:
+```
+cp /var/www/api/index.php /var/www/api/api/index.php
+nano /etc/nginx/sites-available/default
+```
+Pastikan root mengarah ke /var/www/api dan FastCGI PHP aktif. Restart layanan:
+```
+service nginx restart
+service php8.4-fpm restart
+```
+4. Pengujian pada Client: Lakukan curl dari itadori:
+```
+curl -H "Host: jujutsu.K47.com" http://10.87.4.2
+curl -H "Host: jujutsu.K47.com" http://10.87.4.2/api
+```
+Hasil:
+<img width="517" height="182" alt="Soal_14" src="https://github.com/user-attachments/assets/03ab8401-0292-4422-9cbd-b8ac376a81f1" />
+
+
+### Soal 15 (Farrel)
+1. Mengubah Pembobotan API di Geto: Buka file nginx.conf di geto dan atur rasio weight 3:1 untuk nanami dan todo:
+```
+nano /etc/nginx/nginx.conf
+```
+Sesuaikan bagian api_cluster:
+```
+upstream api_cluster {
+    server 10.87.4.5 weight=3;
+    server 10.87.4.6 weight=1;
+}
+```
+Restart Nginx:
+```
+service nginx restart
+```
+2. Pengujian Rasio API: Jalankan loop request dari itadori untuk membuktikan rasio pembagian beban 3:1:
+```
+for i in {1..8}; do curl -s -H "Host: jujutsu.K47.com" http://10.87.4.2/api; echo ""; done
+```
+Hasil:
+
+<img width="1113" height="204" alt="Soal_15" src="https://github.com/user-attachments/assets/bf28e62b-2c68-43aa-a9f2-1f875867967c" />
+
+### Soal 16 (Farrel)
+1. Konfigurasi Gateway Publik (Gojo): Instal Nginx dan atur routing berbasis path / ke frontend pool dan /api ke load balancer internal (geto):
+```
+apt-get update
+apt-get install nginx -y
+nano /etc/nginx/nginx.conf
+```
+Tambahkan blok upstream dan routing:
+```
+upstream frontend_pool {
+    server 10.87.4.3;  # maki
+    server 10.87.4.4;  # panda
+}
+
+server {
+    listen 80;
+    server_name jujutsu.K47.com www.jujutsu.K47.com;
+
+    location / {
+        proxy_pass http://frontend_pool;
+        proxy_set_header Host $host;
+    }
+
+    location /api {
+        proxy_pass http://10.87.4.2/api;
+        proxy_set_header Host $host;
+    }
+}
+```
+```
+rm -f /etc/nginx/sites-enabled/default
+service nginx restart
+```
+2. Pengujian Routing dari Client: Akses IP gojo menggunakan domain host dari itadori:
+```
+curl -H "Host: jujutsu.K47.com" http://10.87.1.4
+for i in {1..8}; do curl -s -H "Host: jujutsu.K47.com" http://10.87.1.4/api; echo ""; done
+```
+Hasil:
+
+<img width="1121" height="387" alt="Soal_16" src="https://github.com/user-attachments/assets/afb37b5c-2b12-4900-b316-16408e2ba027" />
+
+### Soal 17 (Farrel)
+1. Modifikasi Tabel Database: Buka terminal MySQL di yaga dan tambahkan kolom client_ip:
+```
+USE db_shibuya_K47;
+ALTER TABLE request_logs ADD COLUMN IF NOT EXISTS client_ip VARCHAR(45);
+```
+2. Forwarding Real IP di Proxy: Edit nginx.conf di Gojo dan Geto dengan menambahkan parameter proxy headers di setiap blok location:
+```
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+Setelah ditambahkan, restart Nginx pada kedua node tersebut.
+
+3. Modifikasi Script API Backend: Perbarui index.php pada node nanami, todo, dan kirara agar membaca header IP dan menyimpannya:
+```
+$client_ip = $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'];
+// ... [script insert database untuk menyertakan variable $client_ip] ...
+```
+Restart layanan PHP (service php8.4-fpm restart).
+
+4. Verifikasi: Lakukan curl dari client, lalu cek log database di yaga untuk memastikan IP client tercatat dengan benar.
+Hasil:
+<img width="1016" height="226" alt="Soal_17 (1)" src="https://github.com/user-attachments/assets/3af8bc15-3738-4009-a910-8be4f37290de" />
+<img width="702" height="50" alt="Soal_17 (2)" src="https://github.com/user-attachments/assets/4dd976f5-d002-4ab7-bc94-c43da909a7db" />
+
+### Soal 18 (Farrel)
+1. Konfigurasi Backup Server (Kirara): Instal layanan web, salin script API yang sama seperti worker lain, lalu restart layanannya.
+```
+apt-get update
+apt-get install nginx php-fpm php-mysql -y
+```
+2. Setup Failover di Geto: Buka file nginx.conf di geto dan modifikasi blok upstream API dengan menambahkan max_fails, fail_timeout, dan flag backup:
+```
+upstream api_cluster {
+    server 10.87.4.5 weight=3 max_fails=2 fail_timeout=5s;
+    server 10.87.4.6 weight=1 max_fails=2 fail_timeout=5s;
+    server 10.87.4.7 backup;
+}
+```
+Restart Nginx di geto.
+
+3. Simulasi Failover: Matikan Nginx di nanami dan todo (service nginx stop), kemudian lakukan curl request dari itadori. Pastikan traffic otomatis dilempar ke server cadangan (kirara).
+```
+for i in {1..8}; do curl -s -H "Host: jujutsu.K47.com" http://10.87.1.4/api; echo ""; done
+```
+Simulasi gangguan dengan mematikan worker utama (nanami & todo):
+```
+service nginx stop
+```
+```
+curl -H "Host: jujutsu.K47.com" http://10.87.1.4/api
+```
+Hasil:
+<img width="586" height="90" alt="Soal_18 (3)" src="https://github.com/user-attachments/assets/fe2b53bc-261e-497f-983b-0b43db334ee4" />
+<img width="1005" height="255" alt="Soal_18 (2)" src="https://github.com/user-attachments/assets/2acfe177-3851-46aa-aa83-696a18ae1195" />
+<img width="635" height="159" alt="Soal_18 (1)" src="https://github.com/user-attachments/assets/ab906f60-2b5f-489b-879e-ef16bcf0d6ab" />
+<img width="674" height="87" alt="Soal_18 (4)" src="https://github.com/user-attachments/assets/24e5dcae-3b34-470e-985d-dd4557aef86e" />
+
+### Soal 19 (Farrel)
+1. Konfigurasi Direktori & Nginx: Di terminal gojo, buat folder cache dan seting limit di nginx.conf:
+```
+mkdir -p /var/cache/nginx/jujutsu_cache
+chown -R www-data:www-data /var/cache/nginx/jujutsu_cache
+nano /etc/nginx/nginx.conf
+```
+Tambahkan baris berikut di blok http:
+```
+proxy_cache_path /var/cache/nginx/jujutsu_cache levels=1:2 keys_zone=jujutsu_cache:10m max_size=100m inactive=60m use_temp_path=off;
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+```
+Lalu terapkan pada location / untuk Cache dan location /api untuk Rate Limiting:
+```
+location / {
+    # ...
+    proxy_cache jujutsu_cache;
+    proxy_cache_valid 200 302 10m;
+    add_header X-Cache-Status $upstream_cache_status;
+}
+location /api {
+    limit_req zone=api_limit burst=5 nodelay;
+    # ...
+}
+```
+Restart Nginx: service nginx restart.
+
+2. Pengujian: Di itadori, cek status header cache (X-Cache-Status: HIT/MISS) dengan curl -I, dan uji spam rate limit ke endpoint API.
+```
+curl -I -H "Host: jujutsu.K47.com" http://10.87.1.4/
+
+for i in {1..20}; do curl -s -I -H "Host: jujutsu.K47.com" http://10.87.1.4/api | grep "HTTP/"; done
+```
+Hasil:
+<img width="1102" height="525" alt="Soal_19" src="https://github.com/user-attachments/assets/0f05f053-4465-48bf-afea-908c1534ee5b" />
+
+
+### Soal 20 (Farrel)
+1. Uji Load Testing Klien: Dari terminal itadori, jalankan looping request untuk mengukur responsibilitas halaman utama dan efek pemblokiran rate limit (kode 503):
+```
+time for i in {1..100}; do curl -s -I -H "Host: jujutsu.K47.com" http://10.87.1.4/ > /dev/null; done
+```
+```
+for i in {1..30}; do echo -n "Request $i: "; curl -s -I -H "Host: jujutsu.K47.com" http://10.87.1.4/api | head -n 1; done
+```
+2. Pemeriksaan Access Log: Di terminal gojo, buka access log Nginx untuk memverifikasi request mana saja yang sukses (200 OK) dan mana yang diblokir oleh Nginx rate limit (503 Service Unavailable):
+```
+tail -n 30 /var/log/nginx/access.log
+```
+Hasil:
+<img width="1104" height="538" alt="Soal_20 (2)" src="https://github.com/user-attachments/assets/f1098133-3182-4b82-8969-329708f8c8f3" />
+<img width="873" height="559" alt="Soal_20 (1)" src="https://github.com/user-attachments/assets/74b458b2-f60c-40d5-b76c-fe4514ef8c6e" />
